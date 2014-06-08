@@ -37,6 +37,8 @@ app = do
 
     -- /:timeoutMillisecs/:url
     matchAny (regex "^/([0-9]+)/(.*)$") $ do
+        -- TODO (UU): This may throw an exception if the timeout does not fit
+        -- into an Int
         rawTimeoutMillisecs <- param "1"
         rawUrl              <- param "2"
         req                 <- request
