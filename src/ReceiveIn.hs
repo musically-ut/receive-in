@@ -24,11 +24,13 @@ import Web.Scotty                ( addroute, matchAny, html, notFound
 
 app :: ScottyM ()
 app = do
-    addroute OPTIONS "/" $ do
+    -- Since we capture all OPTIONS requests here, we cannot return a redirect
+    -- for them. Hence, OPTIONS method is not in Access-Control-Allow-Methods
+    addroute OPTIONS (regex "^.*$") $ do
         status status204
         setHeader "Access-Control-Allow-Origin" "*"
         setHeader "Access-Control-Allow-Methods"
-                  "GET, POST, PATCH, DELETE, PUT, CONNECT, OPTIONS, HEAD, TRACE"
+                  "GET, POST, PATCH, DELETE, PUT, CONNECT, HEAD, TRACE"
         -- TODO (UU): Enable this for efficiency in this inefficiency
         -- introducing server. Heh.
         --

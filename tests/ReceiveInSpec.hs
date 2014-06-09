@@ -22,6 +22,27 @@ getApp = Scotty.scottyApp app
 assertFailure :: String -> WT.Session ()
 assertFailure msg = msg `deepseq` liftIO (throwIO (WT.WaiTestFailure msg))
 
+assertAllReasonableMethods :: HT.ResponseHeaders -> WT.Session ()
+assertAllReasonableMethods headers = do
+    let headerName = "Access-Control-Allow-Methods"
+    case lookup headerName headers of
+        Nothing -> assertFailure $ "No header: " <> show headerName
+        Just val -> do
+            let allowed method = method `BS.isInfixOf` val
+            let allMethodsAllowed =
+                    allowed "GET"    && allowed "POST"  &&
+                    allowed "DELETE" && allowed "PUT"   &&
+                    allowed "HEAD"   && allowed "PATCH"
+            unless allMethodsAllowed $
+                assertFailure "Not all methods were allowed."
+
+getDefaultOptionReq :: W.Request
+getDefaultOptionReq =
+    flip WT.setRawPathInfo "/" $
+      WT.defaultRequest
+          { W.requestMethod = HT.renderStdMethod HT.OPTIONS
+          }
+
 spec :: Spec
 spec = do
     describe "redirectCall" $ do
@@ -34,34 +55,26 @@ spec = do
                 WT.assertHeader "Location" url res
 
 
-    describe "preflight OPTIONS /" $ do
+    describe "preflight OPTIONS" $ do
         it "should return Access-Control-Allow-Origin as '*'" $ do
             receiveInApp <- getApp
             flip WT.runSession receiveInApp $ do
-                let req = flip WT.setRawPathInfo "/" $
-                            WT.defaultRequest
-                                { W.requestMethod = HT.renderStdMethod HT.OPTIONS
-                                }
+                let req = getDefaultOptionReq
                 res <- WT.srequest (WT.SRequest req "")
                 WT.assertHeader "Access-Control-Allow-Origin" "*" res
 
         it "should return all request forats in Access-Control-Allow-Methods" $ do
             receiveInApp <- getApp
             flip WT.runSession receiveInApp $ do
-                let req = flip WT.setRawPathInfo "/" $
-                            WT.defaultRequest
-                                { W.requestMethod = HT.renderStdMethod HT.OPTIONS
-                                }
+                let req = getDefaultOptionReq
                 res <- WT.srequest (WT.SRequest req "")
-                let headerName = "Access-Control-Allow-Methods"
-                case lookup headerName (WT.simpleHeaders res) of
-                    Nothing -> assertFailure $ "No header: " <> show headerName
-                    Just val -> do
-                        let allowed method = method `BS.isInfixOf` val
-                        let allMethodsAllowed =
-                                allowed "GET" && allowed "POST" &&
-                                allowed "DELETE" && allowed "PUT" &&
-                                allowed "HEAD" && allowed "PATCH"
-                        unless allMethodsAllowed $
-                            assertFailure "Not all methods were allowed."
+                assertAllReasonableMethods (WT.simpleHeaders res)
+
+        it "should behave the same if the request is sent for time-out path" $ do
+            receiveInApp <- getApp
+            flip WT.runSession receiveInApp $ do
+                let req = WT.setRawPathInfo getDefaultOptionReq "/0/url?q=a"
+                res <- WT.srequest (WT.SRequest req "")
+                WT.assertHeader "Access-Control-Allow-Origin" "*" res
+                assertAllReasonableMethods (WT.simpleHeaders res)
 
